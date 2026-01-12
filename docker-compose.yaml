@@ -5,6 +5,7 @@
 # Access: ai.atbench.com (atbench-ai), ai.atbench.com/interviews (interviews)
 # Usage: docker compose up -d
 # Version: v1.3.1
+# Note: Ollama runs on VPS directly (not in Docker)
 # =============================================================================
 
 services:
@@ -62,8 +63,8 @@ services:
       - QDRANT_COLLECTION_NAME=${QDRANT_COLLECTION_NAME:-resumes}
       - QDRANT_OLLAMA_COLLECTION_NAME=${QDRANT_OLLAMA_COLLECTION_NAME:-ollama_resumes}
       - QDRANT_USE_HTTPS=${QDRANT_USE_HTTPS:-false}
-      # Ollama Configuration
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      # Ollama Configuration (runs on VPS host, not in Docker)
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://72.60.200.75:11434}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-v3.1:671b-cloud}
       - OLLAMA_EXTRACTION_MODEL=${OLLAMA_EXTRACTION_MODEL:-deepseek-v3.1:671b-cloud}
@@ -112,8 +113,8 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_REGION=${AWS_REGION:-}
       - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME:-}
-      # Ollama Configuration
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      # Ollama Configuration (runs on VPS host, not in Docker)
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://72.60.200.75:11434}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-v3.1:671b-cloud}
       # CORS
@@ -131,36 +132,6 @@ services:
       interval: 30s
       timeout: 10s
       start_period: 10s
-      retries: 3
-
-  # ---------------------------------------------------------------------------
-  # Ollama LLM Server (Optional - for self-hosted LLM)
-  # ---------------------------------------------------------------------------
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    restart: unless-stopped
-    expose:
-      - "11434"
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    networks:
-      - ai-network
-    # GPU support (uncomment if using NVIDIA GPU)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      start_period: 60s
       retries: 3
 
   # ---------------------------------------------------------------------------
@@ -230,8 +201,6 @@ volumes:
   interview-logs:
     driver: local
   interview-uploads:
-    driver: local
-  ollama-data:
     driver: local
   qdrant-data:
     driver: local
