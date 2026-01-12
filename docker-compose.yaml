@@ -1,0 +1,239 @@
+# =============================================================================
+# docker-compose.yaml - AtBench AI Services Deployment
+# =============================================================================
+# Deploy AI services on separate VPS
+# Access: ai.atbench.com (atbench-ai), ai.atbench.com/interviews (interviews)
+# Usage: docker compose up -d
+# Version: v1.3.1
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: ai-nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # SSL certificates (uncomment for production)
+      # - ./ssl/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      # - ./ssl/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+    depends_on:
+      - atbench-ai
+      - atbench-ai-interviews
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # AI/Resume Service - Python (Port 5001)
+  # ---------------------------------------------------------------------------
+  atbench-ai:
+    image: ${DOCKER_REGISTRY:-atbencher}/atbench-ai:${AI_VERSION:-v1.3.1}
+    container_name: atbench-ai
+    restart: unless-stopped
+    expose:
+      - "5001"
+    # Uncomment to expose directly (for debugging)
+    # ports:
+    #   - "5001:5001"
+    environment:
+      - PORT=5001
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME:-}
+      - DATABASE_URL=${DATABASE_URL:-}
+      # Qdrant Vector Database
+      - QDRANT_HOST=${QDRANT_HOST:-http://qdrant:6333}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_COLLECTION_NAME=${QDRANT_COLLECTION_NAME:-resumes}
+      - QDRANT_OLLAMA_COLLECTION_NAME=${QDRANT_OLLAMA_COLLECTION_NAME:-ollama_resumes}
+      - QDRANT_USE_HTTPS=${QDRANT_USE_HTTPS:-false}
+      # Ollama Configuration
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-v3.1:671b-cloud}
+      - OLLAMA_EXTRACTION_MODEL=${OLLAMA_EXTRACTION_MODEL:-deepseek-v3.1:671b-cloud}
+      - OLLAMA_TECHNICAL_MODEL=${OLLAMA_TECHNICAL_MODEL:-qwen3-coder:480b-cloud}
+      - OLLAMA_COMPLEX_MODEL=${OLLAMA_COMPLEX_MODEL:-kimi-k2:1t-cloud}
+      - OLLAMA_FALLBACK_MODEL=${OLLAMA_FALLBACK_MODEL:-qwen3-coder:480b-cloud}
+      - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-qwen3:8b}
+      # Redis (optional)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      # CORS
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://atbench.com,https://www.atbench.com,http://localhost:3000}
+    volumes:
+      - ai-uploads:/app/uploads
+      - ai-cache:/app/cache
+      - ai-logs:/app/logs
+    depends_on:
+      - redis
+      - qdrant
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # AI Interview Service - Python/Flask (Port 5002)
+  # ---------------------------------------------------------------------------
+  atbench-ai-interviews:
+    image: ${DOCKER_REGISTRY:-atbencher}/atbench-ai-interviews:${INTERVIEW_VERSION:-v1.3.2}
+    container_name: atbench-ai-interviews
+    restart: unless-stopped
+    expose:
+      - "5002"
+    # Uncomment to expose directly (for debugging)
+    # ports:
+    #   - "5002:5002"
+    environment:
+      - PORT=5002
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME:-}
+      # Ollama Configuration
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-v3.1:671b-cloud}
+      # CORS
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://atbench.com,https://www.atbench.com,http://localhost:3000}
+    volumes:
+      - interview-cache:/app/cache/interviews
+      - interview-logs:/app/logs
+      - interview-uploads:/app/uploads
+    depends_on:
+      - redis
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Ollama LLM Server (Optional - for self-hosted LLM)
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    expose:
+      - "11434"
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - ai-network
+    # GPU support (uncomment if using NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Qdrant Vector Database
+  # ---------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    expose:
+      - "6333"
+      - "6334"
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Redis Cache
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    expose:
+      - "6379"
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  ai-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  ai-uploads:
+    driver: local
+  ai-cache:
+    driver: local
+  ai-logs:
+    driver: local
+  interview-cache:
+    driver: local
+  interview-logs:
+    driver: local
+  interview-uploads:
+    driver: local
+  ollama-data:
+    driver: local
+  qdrant-data:
+    driver: local
+  redis-data:
+    driver: local
