@@ -1,1 +1,5 @@
 .env
+ssl/
+*.pem
+*.crt
+*.key
