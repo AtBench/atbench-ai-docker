@@ -3,11 +3,12 @@
 # deploy.sh - Deploy AtBench AI Services (Source Build)
 # =============================================================================
 # Pull latest code and run AtBench AI services from source
+# Each app reads its own .env file - no centralized .env needed
 #
 # Directory Structure (required):
 #   /root/
-#   ├── atbench-ai/              (source repo)
-#   ├── atbench-ai-interviews/   (source repo)
+#   ├── atbench-ai/              (source repo with .env)
+#   ├── atbench-ai-interviews/   (source repo with .env)
 #   └── atbench-ai-docker/       (this repo - docker configs)
 #
 # Usage:
@@ -50,16 +51,24 @@ cd "$PROJECT_ROOT"
 # -----------------------------------------------------------------------------
 # Check for required directories and files
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}[1/5] Checking required files and directories...${NC}"
+echo -e "${BLUE}[1/4] Checking required files and directories...${NC}"
 
 MISSING=()
 
 if [ ! -d "$AI_REPO" ]; then
-    MISSING+=("atbench-ai (sibling directory)")
+    MISSING+=("atbench-ai/ (sibling directory)")
+fi
+
+if [ ! -f "$AI_REPO/.env" ]; then
+    MISSING+=("atbench-ai/.env")
 fi
 
 if [ ! -d "$INTERVIEW_REPO" ]; then
-    MISSING+=("atbench-ai-interviews (sibling directory)")
+    MISSING+=("atbench-ai-interviews/ (sibling directory)")
+fi
+
+if [ ! -f "$INTERVIEW_REPO/.env" ]; then
+    MISSING+=("atbench-ai-interviews/.env")
 fi
 
 if [ ! -f "docker-compose.source.yml" ]; then
@@ -70,15 +79,8 @@ if [ ! -f "nginx/nginx.conf" ]; then
     MISSING+=("nginx/nginx.conf")
 fi
 
-if [ ! -f ".env" ]; then
-    if [ -f ".env.example" ]; then
-        echo -e "${YELLOW}.env not found, copying from .env.example...${NC}"
-        cp .env.example .env
-        echo -e "${RED}Please edit .env with your configuration before continuing${NC}"
-        exit 1
-    else
-        MISSING+=(".env")
-    fi
+if [ ! -d "ssl" ] || [ ! -f "ssl/fullchain.pem" ]; then
+    MISSING+=("ssl/fullchain.pem")
 fi
 
 if [ ${#MISSING[@]} -gt 0 ]; then
@@ -95,7 +97,7 @@ echo ""
 # -----------------------------------------------------------------------------
 # Pull latest code from all repos
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}[2/5] Pulling latest code from repositories...${NC}"
+echo -e "${BLUE}[2/4] Pulling latest code from repositories...${NC}"
 
 echo -e "${YELLOW}Pulling atbench-ai-docker...${NC}"
 git pull || echo -e "${YELLOW}Warning: Could not pull atbench-ai-docker${NC}"
@@ -113,38 +115,18 @@ echo -e "${GREEN}✓ Code pulled${NC}"
 echo ""
 
 # -----------------------------------------------------------------------------
-# Load environment variables
-# -----------------------------------------------------------------------------
-echo -e "${BLUE}[3/5] Loading environment variables...${NC}"
-
-# Export all variables from .env file
-while IFS='=' read -r key value; do
-    # Skip comments and empty lines
-    [[ $key =~ ^#.*$ ]] && continue
-    [[ -z $key ]] && continue
-    # Remove leading/trailing whitespace and quotes
-    key=$(echo "$key" | xargs)
-    value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
-    # Export the variable
-    export "$key=$value"
-done < .env
-
-echo -e "${GREEN}✓ Environment loaded${NC}"
-echo ""
-
-# -----------------------------------------------------------------------------
 # Stop existing containers
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}[4/5] Stopping existing containers...${NC}"
-docker compose -f docker-compose.source.yml --env-file .env down --remove-orphans || true
+echo -e "${BLUE}[3/4] Stopping existing containers...${NC}"
+docker compose -f docker-compose.source.yml down --remove-orphans || true
 echo -e "${GREEN}✓ Containers stopped${NC}"
 echo ""
 
 # -----------------------------------------------------------------------------
 # Start containers
 # -----------------------------------------------------------------------------
-echo -e "${BLUE}[5/5] Starting containers...${NC}"
-docker compose -f docker-compose.source.yml --env-file .env up -d
+echo -e "${BLUE}[4/4] Starting containers...${NC}"
+docker compose -f docker-compose.source.yml up -d
 echo -e "${GREEN}✓ Containers started${NC}"
 echo ""
 
@@ -199,7 +181,7 @@ echo -e "${GREEN}  Deployment Complete!${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 echo -e "Services running:"
-docker compose -f docker-compose.source.yml --env-file .env ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+docker compose -f docker-compose.source.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
 echo ""
 echo -e "${BLUE}Quick commands:${NC}"
 echo -e "  View logs:           docker compose -f docker-compose.source.yml logs -f"

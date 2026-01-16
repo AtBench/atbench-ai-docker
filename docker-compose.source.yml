@@ -2,30 +2,26 @@
 # Docker Compose - Source Build (from local repos)
 # =============================================================================
 # Builds and runs services from cloned source repositories
-# Use this instead of docker-compose.yaml when you want to run from source
+# Apps read their own .env files - no centralized .env needed
 #
 # Directory Structure:
-#   ATBENCH ORG/
-#   ├── atbench-ai/              (source repo)
-#   ├── atbench-ai-interviews/   (source repo)
-#   └── run-atbench-ai/
-#       ├── docker-compose.yaml        <- Primary (uses Docker Hub images)
-#       ├── docker-compose.source.yml  <- THIS FILE (builds from source)
-#       ├── .env
+#   /root/
+#   ├── atbench-ai/              (source repo with its own .env)
+#   ├── atbench-ai-interviews/   (source repo with its own .env)
+#   └── atbench-ai-docker/
+#       ├── docker-compose.source.yml  <- THIS FILE
 #       ├── ssl/
 #       └── nginx/
 #
-# Usage:
-#   cd run-atbench-ai
-#   docker compose -f docker-compose.source.yml up -d
+# IMPORTANT: Each app's .env must use Docker hostnames:
+#   - QDRANT_HOST=http://qdrant:6333
+#   - REDIS_HOST=redis
+#   - OLLAMA_HOST=http://host.docker.internal:11434
 #
-# Access URLs:
-#   https://ai.atbench.com/              -> Main App
-#   https://ai.atbench.com/interviews    -> Interview Service
-#   https://ai.atbench.com/qdrant/       -> Qdrant Dashboard
+# Usage:
+#   cd atbench-ai-docker
+#   docker compose -f docker-compose.source.yml up -d
 # =============================================================================
-
-version: "3.8"
 
 services:
   # ===========================================================================
@@ -67,12 +63,14 @@ services:
       bash -c "
         apt-get update && apt-get install -y --no-install-recommends curl build-essential libffi-dev libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 shared-mime-info fonts-liberation &&
         pip install --cache-dir /pip-cache -r requirements.txt &&
-        gunicorn --bind 0.0.0.0:5001 --workers ${WORKERS:-4} --threads ${THREADS:-2} --timeout ${TIMEOUT:-300} app:app
+        gunicorn --bind 0.0.0.0:5001 --workers 4 --threads 2 --timeout 300 app:app
       "
     expose:
       - "5001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      # Mount source code from sibling folder
+      # Mount source code from sibling folder (includes .env)
       - ../atbench-ai:/app
       # Pip cache (speeds up restarts)
       - pip-cache-ai:/pip-cache
@@ -80,66 +78,6 @@ services:
       - atbench-uploads:/app/uploads
       - atbench-cache:/app/cache
       - atbench-logs:/app/logs
-    environment:
-      # Flask Configuration
-      - FLASK_ENV=${FLASK_ENV:-production}
-      - FLASK_DEBUG=${FLASK_DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY}
-      - APPLICATION_ROOT=${APPLICATION_ROOT:-}
-
-      # File Upload
-      - MAX_CONTENT_LENGTH=${MAX_CONTENT_LENGTH:-104857600}
-      - UPLOAD_FOLDER=${UPLOAD_FOLDER:-uploads}
-      - ALLOWED_EXTENSIONS=${ALLOWED_EXTENSIONS:-pdf,docx,doc,txt}
-
-      # Gunicorn
-      - WORKERS=${WORKERS:-4}
-      - THREADS=${THREADS:-2}
-      - TIMEOUT=${TIMEOUT:-300}
-
-      # Logging
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_FILE=/app/logs/app.log
-
-      # Qdrant
-      - QDRANT_HOST=http://qdrant:6333
-      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
-      - QDRANT_COLLECTION_NAME=${QDRANT_COLLECTION_NAME:-resumes}
-      - QDRANT_OLLAMA_COLLECTION_NAME=${QDRANT_OLLAMA_COLLECTION_NAME:-ollama_resumes}
-      - QDRANT_USE_HTTPS=${QDRANT_USE_HTTPS:-false}
-
-      # OpenAI
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-
-      # Ollama Cloud
-      - OLLAMA_HOST=${OLLAMA_HOST:-https://api.ollama.cloud}
-      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-120}
-      - USE_LLM_EXTRACTION=${USE_LLM_EXTRACTION:-true}
-      - OLLAMA_MAX_CONCURRENT_REQUESTS=${OLLAMA_MAX_CONCURRENT_REQUESTS:-3}
-      - OLLAMA_QUEUE_TIMEOUT=${OLLAMA_QUEUE_TIMEOUT:-300}
-
-      # Embeddings
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
-      - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-384}
-
-      # AWS S3
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-atbench-resumes}
-      - S3_GENERATED_RESUMES_FOLDER=${S3_GENERATED_RESUMES_FOLDER:-Generated-Resumes}
-
-      # Rate Limiting (Redis)
-      - RATELIMIT_ENABLED=${RATELIMIT_ENABLED:-true}
-      - RATELIMIT_STORAGE_URI=redis://:${REDIS_PASSWORD:-atbench-redis-password}@redis:6379/0
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-atbench-redis-password}
-      - RATELIMIT_DEFAULT=${RATELIMIT_DEFAULT:-100 per hour}
-      - RATELIMIT_UPLOAD=${RATELIMIT_UPLOAD:-20 per hour}
-      - RATELIMIT_SEARCH=${RATELIMIT_SEARCH:-60 per hour}
-      - RATELIMIT_OLLAMA=${RATELIMIT_OLLAMA:-10 per hour}
-      - RATELIMIT_ENHANCE=${RATELIMIT_ENHANCE:-5 per hour}
     depends_on:
       - qdrant
       - redis
@@ -164,12 +102,14 @@ services:
       bash -c "
         apt-get update && apt-get install -y --no-install-recommends ffmpeg curl build-essential cmake &&
         pip install --cache-dir /pip-cache -r requirements.txt &&
-        gunicorn --bind 0.0.0.0:5002 --workers ${INTERVIEW_WORKERS:-2} --threads ${INTERVIEW_THREADS:-2} --timeout ${INTERVIEW_TIMEOUT:-300} app:app
+        gunicorn --bind 0.0.0.0:5002 --workers 2 --threads 2 --timeout 300 app:app
       "
     expose:
       - "5002"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      # Mount source code from sibling folder
+      # Mount source code from sibling folder (includes .env)
       - ../atbench-ai-interviews:/app
       # Pip cache (speeds up restarts)
       - pip-cache-interviews:/pip-cache
@@ -177,77 +117,6 @@ services:
       - interview-cache:/app/cache
       - interview-logs:/app/logs
       - interview-uploads:/app/uploads
-    environment:
-      # Server
-      - PORT=5002
-      - FLASK_ENV=${FLASK_ENV:-production}
-      - FLASK_DEBUG=${FLASK_DEBUG:-False}
-      - SECRET_KEY=${SECRET_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5001,http://localhost:3000}
-
-      # Qdrant
-      - QDRANT_HOST=http://qdrant:6333
-      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
-      - QDRANT_USE_HTTPS=${QDRANT_USE_HTTPS:-false}
-      - QDRANT_INTERVIEW_PREPARE_COLLECTION=${QDRANT_INTERVIEW_PREPARE_COLLECTION:-interview_prepare}
-      - QDRANT_INTERVIEW_RESULTS_COLLECTION=${QDRANT_INTERVIEW_RESULTS_COLLECTION:-interview_results}
-      - QDRANT_OLLAMA_COLLECTION=${QDRANT_OLLAMA_COLLECTION:-ollama_resumes}
-
-      # OpenAI (Whisper STT)
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - WHISPER_MODEL=${WHISPER_MODEL:-whisper-1}
-
-      # Google Gemini
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
-
-      # Ollama Cloud
-      - OLLAMA_HOST=${OLLAMA_HOST:-https://api.ollama.cloud}
-      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-120}
-      - OLLAMA_VERIFY_SSL=${OLLAMA_VERIFY_SSL:-false}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-v3.1:671b-cloud}
-      - OLLAMA_TECHNICAL_MODEL=${OLLAMA_TECHNICAL_MODEL:-qwen3-coder:480b-cloud}
-      - OLLAMA_EXTRACTION_MODEL=${OLLAMA_EXTRACTION_MODEL:-deepseek-v3.1:671b-cloud}
-      - OLLAMA_COMPLEX_MODEL=${OLLAMA_COMPLEX_MODEL:-kimi-k2:1t-cloud}
-      - OLLAMA_FALLBACK_MODEL=${OLLAMA_FALLBACK_MODEL:-qwen3-coder:480b-cloud}
-      - OLLAMA_MAX_CONCURRENT_REQUESTS=${OLLAMA_MAX_CONCURRENT_REQUESTS:-3}
-
-      # AWS S3
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-atbench-resumes}
-      - S3_INTERVIEW_FOLDER=${S3_INTERVIEW_FOLDER:-Interview Recordings}
-
-      # Redis
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=1
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-atbench-redis-password}
-
-      # TTS
-      - TTS_VOICE=${TTS_VOICE:-en-IN-NeerjaNeural}
-      - TTS_VOICE_MALE=${TTS_VOICE_MALE:-en-IN-PrabhatNeural}
-
-      # Interview Settings
-      - DEFAULT_QUESTION_COUNT=${DEFAULT_QUESTION_COUNT:-12}
-      - DEFAULT_TIME_PER_QUESTION=${DEFAULT_TIME_PER_QUESTION:-120}
-      - MAX_RECORDING_DURATION=${MAX_RECORDING_DURATION:-600}
-
-      # Rate Limiting
-      - RATELIMIT_ENABLED=${RATELIMIT_ENABLED:-true}
-      - RATELIMIT_STORAGE_URI=redis://:${REDIS_PASSWORD:-atbench-redis-password}@redis:6379/1
-      - RATELIMIT_DEFAULT=${RATELIMIT_DEFAULT:-100 per hour}
-      - RATELIMIT_INTERVIEW=${RATELIMIT_INTERVIEW:-20 per hour}
-
-      # Logging
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_FILE=/app/logs/interview_service.log
-
-      # Embeddings
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
-      - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-384}
     depends_on:
       - qdrant
       - redis
@@ -290,7 +159,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: atbench-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-atbench-redis-password}
+    command: redis-server --appendonly yes
     expose:
       - "6379"
     volumes:
@@ -299,7 +168,7 @@ services:
       - atbench-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-atbench-redis-password}", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
