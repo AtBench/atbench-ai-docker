@@ -5,12 +5,12 @@
 # Use this instead of docker-compose.yaml when you want to run from source
 #
 # Directory Structure:
-#   ai-atbench-servers/
+#   ATBENCH ORG/
 #   ├── atbench-ai/              (source repo)
 #   ├── atbench-ai-interviews/   (source repo)
 #   └── run-atbench-ai/
+#       ├── docker-compose.yaml        <- Primary (uses Docker Hub images)
 #       ├── docker-compose.source.yml  <- THIS FILE (builds from source)
-#       ├── docker-compose.yaml        <- Uses Docker Hub images
 #       ├── .env
 #       ├── ssl/
 #       └── nginx/
@@ -37,6 +37,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
