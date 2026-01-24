@@ -203,19 +203,15 @@ cd /root/atbench-ai-docker
 
 ### Method 2: Deploy Remotely
 
-First, configure your VPS details in `scripts/deploy-remote.sh`:
 ```bash
-VPS_IP="YOUR_VPS_IP"
-```
+# Basic usage (default SSH key: ~/.ssh/id_rsa)
+./scripts/deploy-remote.sh 192.168.1.100
 
-Then run:
-```bash
-# Using environment variable
-export VPS_IP=192.168.1.100
-./scripts/deploy-remote.sh
+# With custom SSH key
+./scripts/deploy-remote.sh 192.168.1.100 ~/.ssh/my-key
 
-# Or with custom SSH key
-./scripts/deploy-remote.sh ~/.ssh/my-key
+# With custom user/directory (via environment variables)
+VPS_USER=ubuntu VPS_BASE_DIR=/home/ubuntu ./scripts/deploy-remote.sh 192.168.1.100
 ```
 
 **What deploy.sh does:**
@@ -397,11 +393,11 @@ docker run --rm -v atbench-ai-docker_redis-data:/data -v /root/backups:/backup a
 ## Quick Reference
 
 ```bash
-# Deploy
+# Deploy (on VPS)
 ./scripts/deploy.sh
 
-# Remote deploy
-export VPS_IP=x.x.x.x && ./scripts/deploy-remote.sh
+# Remote deploy (from local machine)
+./scripts/deploy-remote.sh <VPS_IP> [SSH_KEY]
 
 # Logs
 docker compose -f docker-compose.source.yml logs -f

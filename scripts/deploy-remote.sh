@@ -6,16 +6,20 @@
 #
 # Directory Structure on VPS:
 #   /root/
-#   ├── atbench-ai/              (source repo)
-#   ├── atbench-ai-interviews/   (source repo)
+#   ├── atbench-ai/              (source repo with .env)
+#   ├── atbench-ai-interviews/   (source repo with .env)
 #   └── atbench-ai-docker/       (docker configs)
 #
 # Usage:
-#   ./scripts/deploy-remote.sh [SSH_KEY_PATH]
+#   ./scripts/deploy-remote.sh <VPS_IP> [SSH_KEY_PATH]
 #
 # Examples:
-#   ./scripts/deploy-remote.sh                    # Use default key
-#   ./scripts/deploy-remote.sh ~/.ssh/id_rsa     # Use custom key
+#   ./scripts/deploy-remote.sh 192.168.1.100                      # Default SSH key
+#   ./scripts/deploy-remote.sh 192.168.1.100 ~/.ssh/my-key        # Custom key
+#
+# Environment variables (optional):
+#   VPS_USER     - SSH user (default: root)
+#   VPS_BASE_DIR - Base directory on VPS (default: /root)
 # =============================================================================
 
 set -e
@@ -27,25 +31,27 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# VPS Configuration (UPDATE THESE VALUES)
-VPS_IP="${VPS_IP:-YOUR_VPS_IP}"          # e.g., 192.168.1.100
-VPS_USER="${VPS_USER:-root}"
-VPS_BASE_DIR="${VPS_BASE_DIR:-/root}"
-
-# Default SSH key path (UPDATE THIS)
-DEFAULT_SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_rsa}"
-
 # Parse arguments
-SSH_KEY="${1:-$DEFAULT_SSH_KEY}"
+VPS_IP="$1"
+SSH_KEY="${2:-$HOME/.ssh/id_rsa}"
 
-# Check if VPS_IP is configured
-if [ "$VPS_IP" = "YOUR_VPS_IP" ]; then
-    echo -e "${RED}Error: VPS_IP not configured${NC}"
+# VPS Configuration (can be overridden via environment variables)
+VPS_USER="${VPS_USER:-root}"
+VPS_BASE_DIR="${VPS_BASE_DIR:-/root/AI-ATBENCH-APPS/}"
+
+# Show usage if no VPS_IP provided
+if [ -z "$VPS_IP" ]; then
+    echo -e "${RED}Error: VPS_IP is required${NC}"
     echo ""
-    echo "Please set VPS_IP in one of the following ways:"
-    echo "  1. Edit this script and update VPS_IP variable"
-    echo "  2. Set environment variable: export VPS_IP=192.168.1.100"
+    echo "Usage: $0 <VPS_IP> [SSH_KEY_PATH]"
     echo ""
+    echo "Examples:"
+    echo "  $0 192.168.1.100                       # Default SSH key (~/.ssh/id_rsa)"
+    echo "  $0 192.168.1.100 ~/.ssh/my-key         # Custom SSH key"
+    echo ""
+    echo "Optional environment variables:"
+    echo "  VPS_USER=root                          # SSH user"
+    echo "  VPS_BASE_DIR=/root                     # Base directory on VPS"
     exit 1
 fi
 
@@ -53,13 +59,7 @@ fi
 if [ ! -f "$SSH_KEY" ]; then
     echo -e "${RED}Error: SSH key file not found: $SSH_KEY${NC}"
     echo ""
-    echo "Usage: $0 [SSH_KEY_PATH]"
-    echo ""
-    echo "Examples:"
-    echo "  $0                        # Use default key (~/.ssh/id_rsa)"
-    echo "  $0 ~/.ssh/my-key         # Use custom key"
-    echo ""
-    echo "Or set environment variable: export SSH_KEY=~/.ssh/my-key"
+    echo "Usage: $0 <VPS_IP> [SSH_KEY_PATH]"
     exit 1
 fi
 
