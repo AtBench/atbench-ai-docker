@@ -99,15 +99,18 @@ echo ""
 # -----------------------------------------------------------------------------
 echo -e "${BLUE}[2/4] Pulling latest code from repositories...${NC}"
 
-echo -e "${YELLOW}Pulling atbench-ai-docker...${NC}"
+BRANCH=$(git branch --show-current)
+echo -e "${YELLOW}Pulling atbench-ai-docker (branch: ${BRANCH})...${NC}"
 git pull || echo -e "${YELLOW}Warning: Could not pull atbench-ai-docker${NC}"
 
-echo -e "${YELLOW}Pulling atbench-ai...${NC}"
 cd "$AI_REPO"
+BRANCH=$(git branch --show-current)
+echo -e "${YELLOW}Pulling atbench-ai (branch: ${BRANCH})...${NC}"
 git pull || echo -e "${YELLOW}Warning: Could not pull atbench-ai${NC}"
 
-echo -e "${YELLOW}Pulling atbench-ai-interviews...${NC}"
 cd "$INTERVIEW_REPO"
+BRANCH=$(git branch --show-current)
+echo -e "${YELLOW}Pulling atbench-ai-interviews (branch: ${BRANCH})...${NC}"
 git pull || echo -e "${YELLOW}Warning: Could not pull atbench-ai-interviews${NC}"
 
 cd "$PROJECT_ROOT"
