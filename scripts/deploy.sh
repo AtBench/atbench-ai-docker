@@ -126,7 +126,8 @@ echo ""
 # Start containers
 # -----------------------------------------------------------------------------
 echo -e "${BLUE}[4/4] Building and starting containers...${NC}"
-docker compose -f docker-compose.source.yml up -d --build --no-cache
+docker compose -f docker-compose.source.yml build --no-cache
+docker compose -f docker-compose.source.yml up -d
 echo -e "${GREEN}✓ Containers built and started${NC}"
 echo ""
 
